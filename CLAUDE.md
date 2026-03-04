@@ -26,8 +26,9 @@ Frontend (React/Next) ↔ Backend (FastAPI) ↔ YouTube API / yt-dlp
                     ┌──────┴───────┐
                     │              │
               ┌─────▼─────┐ ┌─────▼─────┐
-              │  OpenAI   │ │  python-  │
-              │  API      │ │  pptx     │
+              │  Zhipu AI │ │  python-  │
+              │ GLM-4.5-  │ │  pptx     │
+              │  Flash    │ │           │
               └───────────┘ └───────────┘
 ```
 
@@ -42,7 +43,7 @@ Frontend (React/Next) ↔ Backend (FastAPI) ↔ YouTube API / yt-dlp
 | yt-dlp 2024.01.0 | YouTube 영상/자막 다운로드 |
 | youtube-transcript-api 0.6.2 | 자막 추출 |
 | python-pptx 0.6.23 | PPT 파일 생성 |
-| OpenAI API 1.12.0 | AI 요약 및 구조화 |
+| zhipuai | AI 요약 및 구조화 (GLM-4.5-Flash, 무료) |
 | Pillow 10.2.0 | 이미지 처리 |
 | uvicorn 0.27.0 | ASGI 서버 |
 | httpx 0.27.0 | HTTP 클라이언트 |
@@ -94,10 +95,10 @@ youtube-to-slides/
 
 | # | 파일 | 내용 |
 |---|---|---|
-| 1-1 | `requirements.txt` | 10개 패키지 의존성 정의 |
+| 1-1 | `requirements.txt` | 10개 패키지 의존성 정의 (openai → zhipuai) |
 | 1-2 | `.gitignore` | venv, __pycache__, .env, output 등 |
 | 1-3 | 디렉토리 생성 | app/, routers/, services/, models/, utils/, output/, tests/ + 각 `__init__.py` |
-| 1-4 | `app/config.py` | Pydantic Settings: OPENAI_API_KEY, OUTPUT_DIR |
+| 1-4 | `app/config.py` | Pydantic Settings: ZHIPU_API_KEY, OUTPUT_DIR |
 | 1-5 | `app/models/schemas.py` | SlideRequest, SlideResponse 모델 |
 | 1-6 | `app/utils/helpers.py` | 유틸리티 함수 (필요시) |
 
@@ -118,9 +119,10 @@ youtube-to-slides/
 - `chunk_transcript(transcript: list[dict], chunk_minutes: int = 3) -> list[str]` — 시간 단위 청크 분할
 
 #### Agent C: `app/services/summarizer.py`
-- `summarize_for_slides(chunks: list[str], video_title: str) -> list[dict]` — OpenAI gpt-4o-mini로 자막 청크 → 슬라이드 구조 변환
+- `summarize_for_slides(chunks: list[str], video_title: str) -> list[dict]` — Zhipu AI GLM-4.5-Flash(무료)로 자막 청크 → 슬라이드 구조 변환
 - 규칙: 슬라이드당 제목 + 불릿 3~5개, 총 5~15장, 한국어, JSON 반환
-- `app.config.settings` 에서 API 키 가져옴
+- `app.config.settings` 에서 ZHIPU_API_KEY 가져옴
+- SDK: `zhipuai` 패키지, `ZhipuAI(api_key=...).chat.completions.create(model="glm-4-flash", ...)`
 
 #### Agent D: `app/services/pptx_builder.py`
 - `create_pptx(slides_data: list[dict], video_title: str, output_path: str) -> str` — PPT 생성
@@ -212,7 +214,7 @@ YouTube URL로 PPT를 생성.
 
 | 변수 | 필수 | 기본값 | 설명 |
 |------|------|--------|------|
-| OPENAI_API_KEY | O | - | OpenAI API 키 |
+| ZHIPU_API_KEY | O | - | Zhipu AI API 키 (zhipuai.cn에서 무료 발급) |
 | OUTPUT_DIR | X | "output" | PPT 저장 디렉토리 |
 
 ---
@@ -227,8 +229,8 @@ source venv/bin/activate
 # 의존성 설치
 pip install -r requirements.txt
 
-# .env 설정
-echo "OPENAI_API_KEY=your_key" > .env
+# .env 설정 (zhipuai.cn 에서 무료 API 키 발급)
+echo "ZHIPU_API_KEY=your_key" > .env
 
 # 서버 실행
 uvicorn app.main:app --reload --port 8000
@@ -241,6 +243,6 @@ uvicorn app.main:app --reload --port 8000
 | 문제 | 해결 방법 |
 |------|-----------|
 | 자막을 찾을 수 없음 | 자동 생성 자막이 있는 영상 사용 |
-| OPENAI_API_KEY 오류 | .env 파일에 키 설정 |
+| ZHIPU_API_KEY 오류 | .env 파일에 키 설정 (zhipuai.cn 무료 발급) |
 | yt-dlp 오류 | `pip install -U yt-dlp` |
 | PPT 파일이 깨짐 | 텍스트 특수문자 제거 처리 |
