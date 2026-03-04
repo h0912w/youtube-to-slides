@@ -238,69 +238,92 @@ uvicorn app.main:app --reload --port 8000
 
 ---
 
-## 사용 방법
+## 사용 방법 (Swagger UI — 브라우저에서 직접 사용)
 
-> **현재 상태:** 웹 UI(채팅창/입력 폼)는 아직 없음. API 서버만 존재하므로 아래 방법으로 사용.
-> 향후 프론트엔드(React/Next.js)를 붙이면 브라우저에서 URL을 입력하는 화면이 제공될 예정.
+> **별도의 프론트엔드(채팅창, 입력 폼 등)는 없습니다.**
+> FastAPI가 자동으로 제공하는 **Swagger UI**를 브라우저에서 열어 YouTube URL을 입력하고 PPT를 받습니다.
 
-### 방법 1: Swagger UI (가장 쉬움 - 브라우저에서 직접)
+### Step 1: 서버 실행
 
-서버 실행 후 브라우저에서 접속:
+```bash
+uvicorn app.main:app --reload --port 8000
+```
+
+### Step 2: Swagger UI 열기
+
+브라우저에서 아래 주소로 접속합니다:
 
 ```
 http://localhost:8000/docs
 ```
 
-1. `POST /api/slides` 항목을 클릭
-2. "Try it out" 버튼 클릭
-3. Request body에 YouTube URL 입력:
+접속하면 API 목록이 보이는 Swagger UI 화면이 나타납니다.
+
+### Step 3: PPT 생성 요청
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  POST /api/slides          [slides]        ◀ 이것을 클릭│
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  [ Try it out ]  ◀ 이 버튼을 클릭                       │
+│                                                         │
+│  Request body:                                          │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │ {                                               │    │
+│  │   "url": "https://www.youtube.com/watch?v=ID",  │◀ URL 입력│
+│  │   "language": "ko",                             │    │
+│  │   "chunk_minutes": 3                            │    │
+│  │ }                                               │    │
+│  └─────────────────────────────────────────────────┘    │
+│                                                         │
+│  [ Execute ]  ◀ 실행 클릭                               │
+│                                                         │
+│  Server response:                                       │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │ {                                               │    │
+│  │   "success": true,                              │    │
+│  │   "filename": "a1b2c3d4.pptx",                  │    │
+│  │   "video_title": "영상 제목",                    │    │
+│  │   "slide_count": 10,                            │    │
+│  │   "download_url": "/api/slides/download/a1b2c3d4.pptx" │
+│  │ }                                               │    │
+│  └─────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────┘
+```
+
+1. **`POST /api/slides`** 항목을 클릭하여 펼침
+2. **"Try it out"** 버튼 클릭 → 입력란이 편집 가능해짐
+3. Request body에 YouTube URL을 입력 (아래 예시 참고):
    ```json
-   {"url": "https://www.youtube.com/watch?v=VIDEO_ID"}
+   {
+     "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+     "language": "ko",
+     "chunk_minutes": 3
+   }
    ```
-4. "Execute" 클릭 → 응답에서 `download_url` 확인
-5. `GET /api/slides/download/{filename}`으로 PPT 다운로드
+   - `url` (필수): YouTube 영상 주소
+   - `language` (선택, 기본 `"ko"`): 자막 언어
+   - `chunk_minutes` (선택, 기본 `3`): 자막 분할 단위(분)
+4. **"Execute"** 클릭 → 아래쪽 Server response에 결과 JSON이 표시됨
+5. 응답에서 `download_url` 값을 확인
 
-### 방법 2: curl (터미널)
+### Step 4: PPT 파일 다운로드
 
-```bash
-# PPT 생성 요청
-curl -X POST http://localhost:8000/api/slides \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://www.youtube.com/watch?v=VIDEO_ID"}'
+**방법 A — Swagger UI에서 바로 다운로드:**
 
-# 응답 예시:
-# {"success":true,"filename":"a1b2c3d4.pptx","video_title":"영상 제목",
-#  "slide_count":10,"download_url":"/api/slides/download/a1b2c3d4.pptx"}
+1. 같은 페이지에서 아래로 스크롤하여 **`GET /api/slides/download/{filename}`** 클릭
+2. "Try it out" 클릭
+3. `filename` 입력란에 Step 3 응답의 `filename` 값(예: `a1b2c3d4.pptx`)을 입력
+4. "Execute" 클릭 → **"Download file"** 링크가 나타남 → 클릭하여 PPT 저장
 
-# PPT 다운로드
-curl -O http://localhost:8000/api/slides/download/a1b2c3d4.pptx
+**방법 B — 브라우저 주소창에 직접 입력:**
+
+```
+http://localhost:8000/api/slides/download/a1b2c3d4.pptx
 ```
 
-### 방법 3: Python 코드
-
-```python
-import httpx
-
-response = httpx.post("http://localhost:8000/api/slides", json={
-    "url": "https://www.youtube.com/watch?v=VIDEO_ID",
-    "language": "ko",
-    "chunk_minutes": 3,
-})
-result = response.json()
-
-download = httpx.get(f"http://localhost:8000{result['download_url']}")
-with open(result["filename"], "wb") as f:
-    f.write(download.content)
-print(f"저장 완료: {result['filename']}")
-```
-
-### 요청 파라미터
-
-| 파라미터 | 타입 | 필수 | 기본값 | 설명 |
-|----------|------|------|--------|------|
-| `url` | string | O | - | YouTube 영상 URL |
-| `language` | string | X | `"ko"` | 자막 언어 (ko, en 등) |
-| `chunk_minutes` | int | X | `3` | 자막을 몇 분 단위로 나눌지 |
+브라우저가 자동으로 `.pptx` 파일을 다운로드합니다.
 
 ### 지원하는 URL 형식
 
@@ -315,7 +338,7 @@ https://www.youtube.com/shorts/dQw4w9WgXcQ
 
 ## 출력 결과
 
-### API 응답 (JSON)
+### 응답 JSON
 
 ```json
 {
@@ -333,15 +356,7 @@ https://www.youtube.com/shorts/dQw4w9WgXcQ
 | `filename` | 생성된 PPT 파일명 |
 | `video_title` | YouTube 영상 제목 |
 | `slide_count` | 총 슬라이드 수 (표지 포함) |
-| `download_url` | PPT 다운로드 경로 |
-
-### PPT 파일 다운로드
-
-응답의 `download_url`로 GET 요청하거나 브라우저에서 직접 접속:
-
-```
-http://localhost:8000/api/slides/download/a1b2c3d4.pptx
-```
+| `download_url` | PPT 다운로드 경로 (Swagger UI 또는 브라우저에서 접속) |
 
 ### 생성되는 PPT 구조
 
@@ -354,10 +369,10 @@ http://localhost:8000/api/slides/download/a1b2c3d4.pptx
 
 ## 에러 응답
 
-| HTTP 코드 | 원인 | 예시 |
+| HTTP 코드 | 원인 | Swagger UI에서 보이는 메시지 |
 |-----------|------|------|
 | **400** | 잘못된 YouTube URL | `{"detail": "Could not extract video ID from URL: ..."}` |
-| **404** | 파일을 찾을 수 없음 | `{"detail": "File not found"}` |
+| **404** | 다운로드 파일 없음 | `{"detail": "File not found"}` |
 | **500** | 서버 처리 오류 (자막 없음, AI 오류 등) | `{"detail": "No transcript found for video: ..."}` |
 
 ---
@@ -365,7 +380,7 @@ http://localhost:8000/api/slides/download/a1b2c3d4.pptx
 ## 내부 처리 흐름
 
 ```
-YouTube URL 입력
+[Swagger UI] YouTube URL 입력 → Execute 클릭
     ↓
 1. URL에서 Video ID 추출 (youtube.py)
     ↓
@@ -379,7 +394,9 @@ YouTube URL 입력
     ↓
 6. PPT 파일 생성 - 표지 + 내용 슬라이드 (pptx_builder.py)
     ↓
-7. 파일 저장 (output/ 디렉토리) → 다운로드 URL 반환
+7. 파일 저장 (output/) → JSON 응답 반환
+    ↓
+[Swagger UI] download_url로 PPT 다운로드
 ```
 
 ---
@@ -388,6 +405,7 @@ YouTube URL 입력
 
 | 문제 | 해결 방법 |
 |------|-----------|
+| Swagger UI가 안 열림 | 서버가 실행 중인지 확인 (`uvicorn app.main:app --reload --port 8000`) |
 | 자막을 찾을 수 없음 | 자동 생성 자막이 있는 영상 사용 |
 | ZHIPU_API_KEY 오류 | .env 파일에 키 설정 (zhipuai.cn 무료 발급) |
 | yt-dlp 오류 | `pip install -U yt-dlp` |
