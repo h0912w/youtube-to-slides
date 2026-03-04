@@ -238,6 +238,152 @@ uvicorn app.main:app --reload --port 8000
 
 ---
 
+## 사용 방법
+
+> **현재 상태:** 웹 UI(채팅창/입력 폼)는 아직 없음. API 서버만 존재하므로 아래 방법으로 사용.
+> 향후 프론트엔드(React/Next.js)를 붙이면 브라우저에서 URL을 입력하는 화면이 제공될 예정.
+
+### 방법 1: Swagger UI (가장 쉬움 - 브라우저에서 직접)
+
+서버 실행 후 브라우저에서 접속:
+
+```
+http://localhost:8000/docs
+```
+
+1. `POST /api/slides` 항목을 클릭
+2. "Try it out" 버튼 클릭
+3. Request body에 YouTube URL 입력:
+   ```json
+   {"url": "https://www.youtube.com/watch?v=VIDEO_ID"}
+   ```
+4. "Execute" 클릭 → 응답에서 `download_url` 확인
+5. `GET /api/slides/download/{filename}`으로 PPT 다운로드
+
+### 방법 2: curl (터미널)
+
+```bash
+# PPT 생성 요청
+curl -X POST http://localhost:8000/api/slides \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://www.youtube.com/watch?v=VIDEO_ID"}'
+
+# 응답 예시:
+# {"success":true,"filename":"a1b2c3d4.pptx","video_title":"영상 제목",
+#  "slide_count":10,"download_url":"/api/slides/download/a1b2c3d4.pptx"}
+
+# PPT 다운로드
+curl -O http://localhost:8000/api/slides/download/a1b2c3d4.pptx
+```
+
+### 방법 3: Python 코드
+
+```python
+import httpx
+
+response = httpx.post("http://localhost:8000/api/slides", json={
+    "url": "https://www.youtube.com/watch?v=VIDEO_ID",
+    "language": "ko",
+    "chunk_minutes": 3,
+})
+result = response.json()
+
+download = httpx.get(f"http://localhost:8000{result['download_url']}")
+with open(result["filename"], "wb") as f:
+    f.write(download.content)
+print(f"저장 완료: {result['filename']}")
+```
+
+### 요청 파라미터
+
+| 파라미터 | 타입 | 필수 | 기본값 | 설명 |
+|----------|------|------|--------|------|
+| `url` | string | O | - | YouTube 영상 URL |
+| `language` | string | X | `"ko"` | 자막 언어 (ko, en 등) |
+| `chunk_minutes` | int | X | `3` | 자막을 몇 분 단위로 나눌지 |
+
+### 지원하는 URL 형식
+
+```
+https://www.youtube.com/watch?v=dQw4w9WgXcQ
+https://youtu.be/dQw4w9WgXcQ
+https://www.youtube.com/embed/dQw4w9WgXcQ
+https://www.youtube.com/shorts/dQw4w9WgXcQ
+```
+
+---
+
+## 출력 결과
+
+### API 응답 (JSON)
+
+```json
+{
+  "success": true,
+  "filename": "a1b2c3d4.pptx",
+  "video_title": "파이썬 기초 강의",
+  "slide_count": 10,
+  "download_url": "/api/slides/download/a1b2c3d4.pptx"
+}
+```
+
+| 필드 | 설명 |
+|------|------|
+| `success` | 성공 여부 |
+| `filename` | 생성된 PPT 파일명 |
+| `video_title` | YouTube 영상 제목 |
+| `slide_count` | 총 슬라이드 수 (표지 포함) |
+| `download_url` | PPT 다운로드 경로 |
+
+### PPT 파일 다운로드
+
+응답의 `download_url`로 GET 요청하거나 브라우저에서 직접 접속:
+
+```
+http://localhost:8000/api/slides/download/a1b2c3d4.pptx
+```
+
+### 생성되는 PPT 구조
+
+| 슬라이드 | 디자인 |
+|----------|--------|
+| **표지** (1장) | 다크 배경(#1A1A2E), 영상 제목 흰색 40pt |
+| **내용** (5~15장) | 흰색 배경, 제목 28pt, 파란 구분선, 불릿 3~5개 |
+
+---
+
+## 에러 응답
+
+| HTTP 코드 | 원인 | 예시 |
+|-----------|------|------|
+| **400** | 잘못된 YouTube URL | `{"detail": "Could not extract video ID from URL: ..."}` |
+| **404** | 파일을 찾을 수 없음 | `{"detail": "File not found"}` |
+| **500** | 서버 처리 오류 (자막 없음, AI 오류 등) | `{"detail": "No transcript found for video: ..."}` |
+
+---
+
+## 내부 처리 흐름
+
+```
+YouTube URL 입력
+    ↓
+1. URL에서 Video ID 추출 (youtube.py)
+    ↓
+2. 영상 메타데이터 추출 - 제목, 설명, 길이 등 (youtube.py + yt-dlp)
+    ↓
+3. 자막 추출 - 한국어 → 영어 → 자동생성 순 폴백 (transcript.py)
+    ↓
+4. 자막을 시간 단위로 분할 (기본 3분) (transcript.py)
+    ↓
+5. AI가 각 청크를 슬라이드 구조로 요약 (summarizer.py + Zhipu AI)
+    ↓
+6. PPT 파일 생성 - 표지 + 내용 슬라이드 (pptx_builder.py)
+    ↓
+7. 파일 저장 (output/ 디렉토리) → 다운로드 URL 반환
+```
+
+---
+
 ## 트러블슈팅
 
 | 문제 | 해결 방법 |
@@ -246,3 +392,4 @@ uvicorn app.main:app --reload --port 8000
 | ZHIPU_API_KEY 오류 | .env 파일에 키 설정 (zhipuai.cn 무료 발급) |
 | yt-dlp 오류 | `pip install -U yt-dlp` |
 | PPT 파일이 깨짐 | 텍스트 특수문자 제거 처리 |
+| 자막 언어가 안 맞음 | `language` 파라미터를 `"en"` 등으로 변경 |
